@@ -157,7 +157,7 @@ public class SceneData
             if (goBf != null)
             {
                 var staticFlagsField = goBf["m_StaticEditorFlags"];
-                if (staticFlagsField != null && staticFlagsField.IsDummy == false)
+                if (staticFlagsField != null && staticFlagsField.Value != null)
                 {
                     // m_StaticEditorFlags: non-zero means the object has some static flags set
                     var staticFlags = staticFlagsField.AsUInt;
