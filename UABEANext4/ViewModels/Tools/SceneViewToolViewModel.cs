@@ -74,20 +74,49 @@ public partial class SceneViewToolViewModel : Tool
             // When new items are added, try auto-load if enabled
             if (AutoLoad && !_hasAutoLoaded && !IsSceneLoaded)
             {
-                // Small delay to allow children to be populated
-                System.Threading.Tasks.Task.Run(async () =>
-                {
-                    await System.Threading.Tasks.Task.Delay(100);
-                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                    {
-                        if (AutoLoad && !_hasAutoLoaded && !IsSceneLoaded)
-                        {
-                            TryAutoLoadScene();
-                        }
-                    });
-                });
+                // Start auto-load with retries to handle bundle files that need time to extract
+                StartAutoLoadWithRetry();
             }
         }
+    }
+
+    private void StartAutoLoadWithRetry()
+    {
+        System.Threading.Tasks.Task.Run(async () =>
+        {
+            // Try multiple times with increasing delays to handle bundle extraction
+            int[] delays = [500, 1000, 2000];
+
+            foreach (var delay in delays)
+            {
+                await System.Threading.Tasks.Task.Delay(delay);
+
+                bool shouldTry = false;
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    if (AutoLoad && !_hasAutoLoaded && !IsSceneLoaded)
+                    {
+                        shouldTry = true;
+                        TryAutoLoadScene();
+                    }
+                });
+
+                // Wait a bit to see if it loaded
+                await System.Threading.Tasks.Task.Delay(200);
+
+                // Check if we succeeded
+                bool loaded = false;
+                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    loaded = IsSceneLoaded || _hasAutoLoaded;
+                });
+
+                if (loaded)
+                {
+                    break;
+                }
+            }
+        });
     }
 
     private void OnWorkspaceItemSelected(object recipient, SelectedWorkspaceItemChangedMessage message)
@@ -134,9 +163,15 @@ public partial class SceneViewToolViewModel : Tool
         var sceneFile = FindSceneFileByName(SceneName);
         if (sceneFile != null)
         {
+            StatusText = $"Auto-loading scene '{SceneName}'...";
             _currentFileInsts = new List<AssetsFileInstance> { sceneFile };
             _hasAutoLoaded = true;
             LoadScene();
+        }
+        else
+        {
+            // Update status to show we're still waiting for the scene file
+            StatusText = $"Waiting for scene '{SceneName}'... (Auto-load enabled)";
         }
     }
 

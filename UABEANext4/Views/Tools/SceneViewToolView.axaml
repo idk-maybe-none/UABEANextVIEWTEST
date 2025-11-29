@@ -12,10 +12,10 @@
     <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="4" Spacing="4">
       <TextBlock VerticalAlignment="Center" Text="Scene:" Margin="0,0,4,0" />
       <TextBox Text="{Binding SceneName}" Width="100" ToolTip.Tip="Scene name to load (e.g., level0)" />
-      <Button Content="Load Scene" Command="{Binding LoadSceneCommand}" ToolTip.Tip="Load the scene from the selected assets file" />
+      <Button x:Name="loadSceneButton" Content="Load Scene" Click="OnLoadSceneClick" ToolTip.Tip="Load the scene from the selected assets file" />
       <CheckBox IsChecked="{Binding AutoLoad}" Content="Auto" VerticalAlignment="Center" ToolTip.Tip="Automatically load the scene when a file is opened" Margin="4,0" />
       <Separator Width="1" Margin="4,0" />
-      <Button Content="Reset Camera" Command="{Binding ResetCameraCommand}" ToolTip.Tip="Reset camera to default position" />
+      <Button x:Name="resetCameraButton" Content="Reset Camera" Click="OnResetCameraClick" ToolTip.Tip="Reset camera to default position" />
       <Separator Width="1" Margin="4,0" />
       <TextBlock VerticalAlignment="Center" Text="Controls: " FontWeight="SemiBold" />
       <TextBlock VerticalAlignment="Center" Text="Right-click + WASD, Scroll to zoom" Foreground="Gray" />
