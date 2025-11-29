@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Messaging;
 using Dock.Model.Mvvm.Controls;
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Linq;
 using UABEANext4.AssetWorkspace;
 using UABEANext4.Logic;
@@ -15,6 +16,7 @@ namespace UABEANext4.ViewModels.Tools;
 public partial class SceneViewToolViewModel : Tool
 {
     const string TOOL_TITLE = "Scene View";
+    const string DEFAULT_SCENE_NAME = "level0";
 
     public Workspace Workspace { get; }
 
@@ -25,12 +27,19 @@ public partial class SceneViewToolViewModel : Tool
     private SceneObject? _selectedObject;
 
     [ObservableProperty]
-    private string _statusText = "No scene loaded. Select an assets file to load the scene.";
+    private string _statusText = "No scene loaded. Load a scene or open a file.";
 
     [ObservableProperty]
     private bool _isSceneLoaded = false;
 
+    [ObservableProperty]
+    private string _sceneName = DEFAULT_SCENE_NAME;
+
+    [ObservableProperty]
+    private bool _autoLoad = true;
+
     private List<AssetsFileInstance>? _currentFileInsts;
+    private bool _hasAutoLoaded = false;
 
     /// <summary>
     /// Action to reset the camera. Set by the view to connect to the SceneViewControl.
@@ -53,6 +62,32 @@ public partial class SceneViewToolViewModel : Tool
 
         WeakReferenceMessenger.Default.Register<SelectedWorkspaceItemChangedMessage>(this, OnWorkspaceItemSelected);
         WeakReferenceMessenger.Default.Register<WorkspaceClosingMessage>(this, OnWorkspaceClosing);
+
+        // Subscribe to workspace items being added
+        Workspace.RootItems.CollectionChanged += OnRootItemsChanged;
+    }
+
+    private void OnRootItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == NotifyCollectionChangedAction.Add && e.NewItems != null)
+        {
+            // When new items are added, try auto-load if enabled
+            if (AutoLoad && !_hasAutoLoaded && !IsSceneLoaded)
+            {
+                // Small delay to allow children to be populated
+                System.Threading.Tasks.Task.Run(async () =>
+                {
+                    await System.Threading.Tasks.Task.Delay(100);
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    {
+                        if (AutoLoad && !_hasAutoLoaded && !IsSceneLoaded)
+                        {
+                            TryAutoLoadScene();
+                        }
+                    });
+                });
+            }
+        }
     }
 
     private void OnWorkspaceItemSelected(object recipient, SelectedWorkspaceItemChangedMessage message)
@@ -84,7 +119,63 @@ public partial class SceneViewToolViewModel : Tool
         {
             _currentFileInsts = fileInsts;
             StatusText = $"Ready to load scene from {_currentFileInsts.Count} file(s). Click 'Load Scene' to begin.";
+
+            // Auto-load if enabled and not already loaded
+            if (AutoLoad && !_hasAutoLoaded && !IsSceneLoaded)
+            {
+                TryAutoLoadScene();
+            }
         }
+    }
+
+    private void TryAutoLoadScene()
+    {
+        // Try to find the scene by name in the workspace
+        var sceneFile = FindSceneFileByName(SceneName);
+        if (sceneFile != null)
+        {
+            _currentFileInsts = new List<AssetsFileInstance> { sceneFile };
+            _hasAutoLoaded = true;
+            LoadScene();
+        }
+    }
+
+    private AssetsFileInstance? FindSceneFileByName(string sceneName)
+    {
+        // Search all workspace items for a file matching the scene name
+        foreach (var rootItem in Workspace.RootItems)
+        {
+            var result = FindSceneInItem(rootItem, sceneName);
+            if (result != null) return result;
+        }
+        return null;
+    }
+
+    private AssetsFileInstance? FindSceneInItem(WorkspaceItem item, string sceneName)
+    {
+        // Check if this item matches the scene name
+        if (item.ObjectType == WorkspaceItemType.AssetsFile && item.Object is AssetsFileInstance fileInst)
+        {
+            var name = item.Name.ToLowerInvariant();
+            var searchName = sceneName.ToLowerInvariant();
+
+            // Match by exact name, name without extension, or if the file name contains the scene name
+            if (name == searchName ||
+                name == searchName + ".assets" ||
+                name.Contains(searchName))
+            {
+                return fileInst;
+            }
+        }
+
+        // Search children (e.g., assets files inside bundle files)
+        foreach (var child in item.Children)
+        {
+            var result = FindSceneInItem(child, sceneName);
+            if (result != null) return result;
+        }
+
+        return null;
     }
 
     private void OnWorkspaceClosing(object recipient, WorkspaceClosingMessage message)
@@ -92,17 +183,36 @@ public partial class SceneViewToolViewModel : Tool
         SceneData = null;
         SelectedObject = null;
         IsSceneLoaded = false;
-        StatusText = "No scene loaded. Select an assets file to load the scene.";
+        StatusText = "No scene loaded. Load a scene or open a file.";
         _currentFileInsts = null;
+        _hasAutoLoaded = false;
     }
 
     [RelayCommand]
     private void LoadScene()
     {
+        // If no file is currently selected, try to find the scene by name
         if (_currentFileInsts == null || _currentFileInsts.Count == 0)
         {
-            StatusText = "No assets file selected. Please select an assets file in the Workspace Explorer first.";
-            return;
+            var sceneFile = FindSceneFileByName(SceneName);
+            if (sceneFile != null)
+            {
+                _currentFileInsts = new List<AssetsFileInstance> { sceneFile };
+            }
+            else
+            {
+                // If still no file, try to get the first available file from the workspace
+                var firstFile = GetFirstAvailableFile();
+                if (firstFile != null)
+                {
+                    _currentFileInsts = new List<AssetsFileInstance> { firstFile };
+                }
+                else
+                {
+                    StatusText = $"No scene file '{SceneName}' found. Open a file or bundle first.";
+                    return;
+                }
+            }
         }
 
         StatusText = "Loading scene...";
@@ -129,6 +239,32 @@ public partial class SceneViewToolViewModel : Tool
             StatusText = $"Error loading scene: {ex.Message}";
             IsSceneLoaded = false;
         }
+    }
+
+    private AssetsFileInstance? GetFirstAvailableFile()
+    {
+        foreach (var rootItem in Workspace.RootItems)
+        {
+            var file = GetFirstFileInItem(rootItem);
+            if (file != null) return file;
+        }
+        return null;
+    }
+
+    private AssetsFileInstance? GetFirstFileInItem(WorkspaceItem item)
+    {
+        if (item.ObjectType == WorkspaceItemType.AssetsFile && item.Object is AssetsFileInstance fileInst)
+        {
+            return fileInst;
+        }
+
+        foreach (var child in item.Children)
+        {
+            var file = GetFirstFileInItem(child);
+            if (file != null) return file;
+        }
+
+        return null;
     }
 
     [RelayCommand]
