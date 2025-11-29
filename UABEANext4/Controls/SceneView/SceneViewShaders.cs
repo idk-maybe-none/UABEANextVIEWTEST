@@ -2,20 +2,23 @@ namespace UABEANext4.Controls.SceneView;
 
 public static class SceneViewShaders
 {
-    // Vertex shader with texture coordinates
+    // Vertex shader with texture coordinates and lightmap UVs
     public const string VERTEX_SOURCE = @"#version 300 es
 precision highp float;
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 aNormal;
 layout (location = 2) in vec2 aTexCoord;
+layout (location = 3) in vec2 aLightmapUV;
 
 uniform mat4 uModel;
 uniform mat4 uProjection;
 uniform mat4 uView;
+uniform vec4 uLightmapScaleOffset;
 
 out vec3 FragPos;
 out vec3 FragNormal;
 out vec2 TexCoord;
+out vec2 LightmapUV;
 
 void main()
 {
@@ -24,15 +27,18 @@ void main()
     gl_Position = uProjection * uView * worldPos;
     FragNormal = mat3(transpose(inverse(uModel))) * aNormal;
     TexCoord = aTexCoord;
+    // Apply lightmap scale and offset
+    LightmapUV = aLightmapUV * uLightmapScaleOffset.xy + uLightmapScaleOffset.zw;
 }";
 
-    // Fragment shader with texture and lighting
+    // Fragment shader with texture, lighting, and lightmap support
     public const string FRAGMENT_SOURCE = @"#version 300 es
 precision highp float;
 
 in vec3 FragPos;
 in vec3 FragNormal;
 in vec2 TexCoord;
+in vec2 LightmapUV;
 
 out vec4 FragColor;
 
@@ -40,7 +46,9 @@ uniform vec3 uDirectionalLightDir;
 uniform vec3 uDirectionalLightColor;
 uniform vec3 uCameraPos;
 uniform sampler2D uTexture;
+uniform sampler2D uLightmap;
 uniform bool uHasTexture;
+uniform bool uHasLightmap;
 uniform bool uIsSelected;
 uniform vec3 uBaseColor;
 
@@ -48,19 +56,6 @@ void main()
 {
     vec3 normal = normalize(FragNormal);
     vec3 lightDirection = normalize(-uDirectionalLightDir);
-
-    // Ambient
-    vec3 ambient = 0.3 * uDirectionalLightColor;
-
-    // Diffuse
-    float diff = max(dot(normal, lightDirection), 0.0);
-    vec3 diffuse = diff * uDirectionalLightColor;
-
-    // Specular
-    vec3 viewDir = normalize(uCameraPos - FragPos);
-    vec3 reflectDir = reflect(-lightDirection, normal);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
-    vec3 specular = 0.2 * spec * uDirectionalLightColor;
 
     // Get base color from texture or uniform
     vec3 objectColor;
@@ -70,7 +65,29 @@ void main()
         objectColor = uBaseColor;
     }
 
-    vec3 result = (ambient + diffuse + specular) * objectColor;
+    vec3 result;
+    if (uHasLightmap) {
+        // Use lightmap for baked lighting (multiply with albedo)
+        vec3 lightmapColor = texture(uLightmap, LightmapUV).rgb;
+        // Decode lightmap (Unity uses different encoding, but basic multiply works)
+        result = objectColor * lightmapColor * 2.0;
+    } else {
+        // Use real-time lighting
+        // Ambient
+        vec3 ambient = 0.3 * uDirectionalLightColor;
+
+        // Diffuse
+        float diff = max(dot(normal, lightDirection), 0.0);
+        vec3 diffuse = diff * uDirectionalLightColor;
+
+        // Specular
+        vec3 viewDir = normalize(uCameraPos - FragPos);
+        vec3 reflectDir = reflect(-lightDirection, normal);
+        float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
+        vec3 specular = 0.2 * spec * uDirectionalLightColor;
+
+        result = (ambient + diffuse + specular) * objectColor;
+    }
 
     // Selection highlight
     if (uIsSelected) {
@@ -151,4 +168,5 @@ void main()
     public const int POSITION_LOC = 0;
     public const int NORMAL_LOC = 1;
     public const int TEXCOORD_LOC = 2;
+    public const int LIGHTMAP_UV_LOC = 3;
 }

@@ -98,6 +98,7 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         public Vector3 Position;
         public Vector3 Normal;
         public Vector2 TexCoord;
+        public Vector2 LightmapUV;
     }
 
     private class ObjectBuffers
@@ -106,8 +107,11 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         public uint Vbo;
         public uint Ebo;
         public uint TextureId;
+        public uint LightmapId;
         public int IndexCount;
         public bool HasTexture;
+        public bool HasLightmap;
+        public Vector4 LightmapScaleOffset;
     }
 
     public SceneViewControl()
@@ -634,6 +638,10 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
             {
                 _gl.DeleteTexture(buf.TextureId);
             }
+            if (buf.HasLightmap)
+            {
+                _gl.DeleteTexture(buf.LightmapId);
+            }
         }
         _objectBuffers.Clear();
 
@@ -674,11 +682,19 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
                     texCoord = new Vector2(obj.UVs[i * 2], 1.0f - obj.UVs[i * 2 + 1]);
                 }
 
+                var lightmapUV = Vector2.Zero;
+                if (obj.LightmapUVs != null && obj.LightmapUVs.Length >= (i + 1) * 2)
+                {
+                    // Flip V coordinate for lightmap UVs as well
+                    lightmapUV = new Vector2(obj.LightmapUVs[i * 2], 1.0f - obj.LightmapUVs[i * 2 + 1]);
+                }
+
                 vertices[i] = new Vertex
                 {
                     Position = pos,
                     Normal = normal,
-                    TexCoord = texCoord
+                    TexCoord = texCoord,
+                    LightmapUV = lightmapUV
                 };
             }
 
@@ -708,16 +724,18 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
                 _gl.BufferData(BufferTargetARB.ElementArrayBuffer, (nuint)(mesh.Indices.Length * sizeof(ushort)), ptr, BufferUsageARB.StaticDraw);
             }
 
-            // Vertex attributes
+            // Vertex attributes (Position=0, Normal=12, TexCoord=24, LightmapUV=32)
             _gl.VertexAttribPointer(SceneViewShaders.POSITION_LOC, 3, VertexAttribPointerType.Float, false, (uint)vertexSize, (void*)0);
             _gl.VertexAttribPointer(SceneViewShaders.NORMAL_LOC, 3, VertexAttribPointerType.Float, false, (uint)vertexSize, (void*)12);
             _gl.VertexAttribPointer(SceneViewShaders.TEXCOORD_LOC, 2, VertexAttribPointerType.Float, false, (uint)vertexSize, (void*)24);
+            _gl.VertexAttribPointer(SceneViewShaders.LIGHTMAP_UV_LOC, 2, VertexAttribPointerType.Float, false, (uint)vertexSize, (void*)32);
 
             _gl.EnableVertexAttribArray(SceneViewShaders.POSITION_LOC);
             _gl.EnableVertexAttribArray(SceneViewShaders.NORMAL_LOC);
             _gl.EnableVertexAttribArray(SceneViewShaders.TEXCOORD_LOC);
+            _gl.EnableVertexAttribArray(SceneViewShaders.LIGHTMAP_UV_LOC);
 
-            // Texture
+            // Albedo Texture
             if (obj.HasTexture && obj.TextureData != null)
             {
                 buffers.TextureId = _gl.GenTexture();
@@ -735,6 +753,26 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
                         PixelFormat.Bgra, PixelType.UnsignedByte, ptr);
                 }
                 _gl.GenerateMipmap(TextureTarget.Texture2D);
+            }
+
+            // Lightmap Texture
+            if (obj.HasLightmap && obj.LightmapData != null)
+            {
+                buffers.LightmapId = _gl.GenTexture();
+                buffers.HasLightmap = true;
+                buffers.LightmapScaleOffset = obj.LightmapScaleOffset;
+
+                _gl.BindTexture(TextureTarget.Texture2D, buffers.LightmapId);
+                _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
+                _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
+                _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Linear);
+                _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
+
+                fixed (byte* ptr = obj.LightmapData)
+                {
+                    _gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.Rgba, (uint)obj.LightmapWidth, (uint)obj.LightmapHeight, 0,
+                        PixelFormat.Bgra, PixelType.UnsignedByte, ptr);
+                }
             }
 
             _gl.BindVertexArray(0);
@@ -825,9 +863,12 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         var lightColorLoc = _gl.GetUniformLocation(_mainShaderProgram, "uDirectionalLightColor");
         var cameraPosLoc = _gl.GetUniformLocation(_mainShaderProgram, "uCameraPos");
         var hasTextureLoc = _gl.GetUniformLocation(_mainShaderProgram, "uHasTexture");
+        var hasLightmapLoc = _gl.GetUniformLocation(_mainShaderProgram, "uHasLightmap");
         var isSelectedLoc = _gl.GetUniformLocation(_mainShaderProgram, "uIsSelected");
         var baseColorLoc = _gl.GetUniformLocation(_mainShaderProgram, "uBaseColor");
         var textureLoc = _gl.GetUniformLocation(_mainShaderProgram, "uTexture");
+        var lightmapLoc = _gl.GetUniformLocation(_mainShaderProgram, "uLightmap");
+        var lightmapScaleOffsetLoc = _gl.GetUniformLocation(_mainShaderProgram, "uLightmapScaleOffset");
 
         _gl.UniformMatrix4(projLoc, 1, false, &projection.M11);
         _gl.UniformMatrix4(viewLoc, 1, false, &view.M11);
@@ -835,6 +876,7 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         _gl.Uniform3(lightColorLoc, 1f, 1f, 1f);
         _gl.Uniform3(cameraPosLoc, _cameraPosition.X, _cameraPosition.Y, _cameraPosition.Z);
         _gl.Uniform1(textureLoc, 0);
+        _gl.Uniform1(lightmapLoc, 1);
 
         foreach (var obj in SceneData.AllObjects)
         {
@@ -843,13 +885,30 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
             var model = obj.WorldMatrix;
             _gl.UniformMatrix4(modelLoc, 1, false, &model.M11);
             _gl.Uniform1(hasTextureLoc, buffers.HasTexture ? 1 : 0);
+            _gl.Uniform1(hasLightmapLoc, buffers.HasLightmap ? 1 : 0);
             _gl.Uniform1(isSelectedLoc, obj.IsSelected ? 1 : 0);
             _gl.Uniform3(baseColorLoc, 0.7f, 0.7f, 0.7f);
+
+            if (buffers.HasLightmap)
+            {
+                _gl.Uniform4(lightmapScaleOffsetLoc, buffers.LightmapScaleOffset.X, buffers.LightmapScaleOffset.Y,
+                    buffers.LightmapScaleOffset.Z, buffers.LightmapScaleOffset.W);
+            }
+            else
+            {
+                _gl.Uniform4(lightmapScaleOffsetLoc, 1f, 1f, 0f, 0f);
+            }
 
             if (buffers.HasTexture)
             {
                 _gl.ActiveTexture(TextureUnit.Texture0);
                 _gl.BindTexture(TextureTarget.Texture2D, buffers.TextureId);
+            }
+
+            if (buffers.HasLightmap)
+            {
+                _gl.ActiveTexture(TextureUnit.Texture1);
+                _gl.BindTexture(TextureTarget.Texture2D, buffers.LightmapId);
             }
 
             _gl.BindVertexArray(buffers.Vao);
@@ -935,6 +994,10 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
             if (buf.HasTexture)
             {
                 _gl.DeleteTexture(buf.TextureId);
+            }
+            if (buf.HasLightmap)
+            {
+                _gl.DeleteTexture(buf.LightmapId);
             }
         }
         _objectBuffers.Clear();

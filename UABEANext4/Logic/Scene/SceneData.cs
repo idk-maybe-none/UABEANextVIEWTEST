@@ -254,6 +254,11 @@ public class SceneData
                                     {
                                         sceneObj.UVs = sceneObj.Mesh.UVs[0];
                                     }
+                                    // Load UV1 for lightmaps
+                                    if (sceneObj.Mesh?.UVs != null && sceneObj.Mesh.UVs.Length > 1 && sceneObj.Mesh.UVs[1] != null)
+                                    {
+                                        sceneObj.LightmapUVs = sceneObj.Mesh.UVs[1];
+                                    }
                                     meshLoaded = true;
                                     skinnedMeshesLoaded++;
                                     meshesLoaded++;
@@ -319,6 +324,11 @@ public class SceneData
                                     {
                                         sceneObj.UVs = sceneObj.Mesh.UVs[0];
                                     }
+                                    // Load UV1 for lightmaps
+                                    if (sceneObj.Mesh?.UVs != null && sceneObj.Mesh.UVs.Length > 1 && sceneObj.Mesh.UVs[1] != null)
+                                    {
+                                        sceneObj.LightmapUVs = sceneObj.Mesh.UVs[1];
+                                    }
                                     meshLoaded = true;
                                     colliderMeshesLoaded++;
                                     meshesLoaded++;
@@ -364,6 +374,11 @@ public class SceneData
                                         if (sceneObj.Mesh?.UVs != null && sceneObj.Mesh.UVs.Length > 0 && sceneObj.Mesh.UVs[0] != null)
                                         {
                                             sceneObj.UVs = sceneObj.Mesh.UVs[0];
+                                        }
+                                        // Load UV1 for lightmaps
+                                        if (sceneObj.Mesh?.UVs != null && sceneObj.Mesh.UVs.Length > 1 && sceneObj.Mesh.UVs[1] != null)
+                                        {
+                                            sceneObj.LightmapUVs = sceneObj.Mesh.UVs[1];
                                         }
                                         meshLoaded = true;
                                         meshesLoaded++;

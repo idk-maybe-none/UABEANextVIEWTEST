@@ -38,6 +38,14 @@ public class SceneObject
     // UV data for texture mapping
     public float[]? UVs { get; set; }
 
+    // Lightmap data
+    public float[]? LightmapUVs { get; set; }  // UV2 for lightmap
+    public byte[]? LightmapData { get; set; }
+    public int LightmapWidth { get; set; }
+    public int LightmapHeight { get; set; }
+    public Vector4 LightmapScaleOffset { get; set; } = new Vector4(1, 1, 0, 0);  // (scaleX, scaleY, offsetX, offsetY)
+    public bool HasLightmap => LightmapData != null && LightmapData.Length > 0;
+
     // Hierarchy
     public SceneObject? Parent { get; set; }
     public List<SceneObject> Children { get; } = new();
