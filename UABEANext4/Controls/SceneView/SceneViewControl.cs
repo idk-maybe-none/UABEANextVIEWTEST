@@ -19,50 +19,43 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
     private bool _loaded = false;
     private bool _dirtyScene = false;
 
-    // Shaders
     private uint _mainShaderProgram;
     private uint _gridShaderProgram;
     private uint _gizmoShaderProgram;
 
-    // Buffers for objects
     private readonly Dictionary<SceneObject, ObjectBuffers> _objectBuffers = new();
     private uint _gridVao;
     private uint _gridVbo;
 
-    // Camera state
     private Vector3 _cameraPosition = new(0f, 5f, 10f);
-    private float _cameraYaw = -90f; // Look towards -Z initially
+    private float _cameraYaw = -90f;
     private float _cameraPitch = -15f;
     private Vector3 _cameraFront = new(0f, 0f, -1f);
     private Vector3 _cameraUp = Vector3.UnitY;
 
-    // Input state
     private bool _isRightMouseDown = false;
     private Point _lastMousePos;
     private readonly HashSet<Key> _pressedKeys = new();
     private float _moveSpeed = 10f;
+    private float _baseMoveSpeed = 10f;
     private float _mouseSensitivity = 0.15f;
 
-    // Object interaction
     private SceneObject? _selectedObject;
     private SceneObject? _hoveredObject;
     private bool _isDragging = false;
-    private bool _isDraggingObject = false; // Direct object dragging (not gizmo)
+    private bool _isDraggingObject = false;
     private Vector3 _dragStartPos;
     private Vector3 _dragPlaneNormal;
-    private Vector3 _dragOffset; // Offset from object center to click point
-    private int _activeAxis = -1; // 0=X, 1=Y, 2=Z, -1=none
+    private Vector3 _dragOffset;
+    private int _activeAxis = -1;
 
-    // Undo/Redo system
     private readonly Stack<SceneUndoAction> _undoStack = new();
     private readonly Stack<SceneUndoAction> _redoStack = new();
     private const int MaxUndoStackSize = 100;
 
-    // Frame timing
     private DateTime _lastFrameTime = DateTime.Now;
     private float _deltaTime = 0f;
 
-    // Scene data
     private SceneData? _sceneData;
 
     public static readonly DirectProperty<SceneViewControl, SceneData?> SceneDataProperty =
@@ -76,29 +69,21 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         {
             SetAndRaise(SceneDataProperty, ref _sceneData, value);
             _dirtyScene = true;
-            // Request a new frame to ensure the scene is rendered
             InvalidateVisual();
         }
     }
 
-    /// <summary>
-    /// Marks the scene as dirty, forcing a rebuild of the mesh buffers on the next render.
-    /// </summary>
     public void MarkDirty()
     {
         _dirtyScene = true;
         InvalidateVisual();
     }
 
-    /// <summary>
-    /// Pushes an undo action onto the stack.
-    /// </summary>
     public void PushUndoAction(SceneUndoAction action)
     {
         _undoStack.Push(action);
-        _redoStack.Clear(); // Clear redo stack when new action is pushed
+        _redoStack.Clear();
 
-        // Limit stack size
         if (_undoStack.Count > MaxUndoStackSize)
         {
             var tempStack = new Stack<SceneUndoAction>();
@@ -114,9 +99,6 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         }
     }
 
-    /// <summary>
-    /// Undoes the last action.
-    /// </summary>
     public bool Undo()
     {
         if (_undoStack.Count == 0)
@@ -129,9 +111,6 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         return true;
     }
 
-    /// <summary>
-    /// Redoes the last undone action.
-    /// </summary>
     public bool Redo()
     {
         if (_redoStack.Count == 0)
@@ -144,10 +123,7 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         return true;
     }
 
-    // Event for selection changes
     public event EventHandler<SceneObject?>? SelectionChanged;
-
-    // Event for duplicate/delete requests (to connect to view model)
     public event EventHandler? DuplicateRequested;
     public event EventHandler? DeleteRequested;
 
@@ -199,19 +175,16 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         ));
     }
 
-    /// <summary>
-    /// Resets the camera to its default position and orientation.
-    /// </summary>
     public void ResetCamera()
     {
         _cameraPosition = new Vector3(0f, 5f, 10f);
         _cameraYaw = -90f;
         _cameraPitch = -15f;
+        _baseMoveSpeed = 10f;
+        _moveSpeed = 10f;
         UpdateCameraVectors();
         InvalidateVisual();
     }
-
-    #region Input Handling
 
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -393,8 +366,9 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
 
     private void OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
     {
-        // Zoom by moving forward/backward
-        _cameraPosition += _cameraFront * (float)e.Delta.Y * 2f;
+        _baseMoveSpeed *= (float)Math.Pow(1.1, e.Delta.Y);
+        _baseMoveSpeed = Math.Clamp(_baseMoveSpeed, 1f, 100f);
+        _moveSpeed = _baseMoveSpeed;
     }
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
@@ -448,6 +422,11 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
     {
         if (!_isRightMouseDown) return;
 
+        if (_pressedKeys.Contains(Key.LeftShift))
+            _moveSpeed = _baseMoveSpeed * 2.5f;
+        else
+            _moveSpeed = _baseMoveSpeed;
+
         var speed = _moveSpeed * _deltaTime;
         var right = Vector3.Normalize(Vector3.Cross(_cameraFront, _cameraUp));
 
@@ -463,17 +442,7 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
             _cameraPosition += _cameraUp * speed;
         if (_pressedKeys.Contains(Key.Q) || _pressedKeys.Contains(Key.LeftCtrl))
             _cameraPosition -= _cameraUp * speed;
-
-        // Speed modifiers
-        if (_pressedKeys.Contains(Key.LeftShift))
-            _moveSpeed = 25f;
-        else
-            _moveSpeed = 10f;
     }
-
-    #endregion
-
-    #region Object Picking and Gizmos
 
     private (Vector3 origin, Vector3 direction) GetMouseRay(Point screenPos)
     {
@@ -613,10 +582,6 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         return planePoint;
     }
 
-    #endregion
-
-    #region OpenGL Rendering
-
     public bool HitTest(Point point) => true;
 
     private void CheckError(string location)
@@ -726,7 +691,6 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
     {
         if (_gl == null || SceneData == null) return;
 
-        // Clean up old buffers
         foreach (var buf in _objectBuffers.Values)
         {
             _gl.DeleteVertexArray(buf.Vao);
@@ -743,7 +707,6 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         }
         _objectBuffers.Clear();
 
-        // Create buffers for each object with a mesh
         foreach (var obj in SceneData.AllObjects)
         {
             if (!obj.HasMesh || obj.Mesh == null) continue;
@@ -757,7 +720,7 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
                 var pos = new Vector3(
                     mesh.Vertices[i * 3],
                     mesh.Vertices[i * 3 + 1],
-                    mesh.Vertices[i * 3 + 2]
+                    -mesh.Vertices[i * 3 + 2]
                 );
 
                 var normal = Vector3.UnitY;
@@ -766,22 +729,20 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
                     normal = new Vector3(
                         mesh.Normals[i * 3],
                         mesh.Normals[i * 3 + 1],
-                        mesh.Normals[i * 3 + 2]
+                        -mesh.Normals[i * 3 + 2]
                     );
                 }
 
                 var texCoord = Vector2.Zero;
                 if (obj.UVs != null && obj.UVs.Length >= (i + 1) * 2)
                 {
-                    // Flip V coordinate: Unity uses bottom-left origin, textures stored with top-left origin
-                    texCoord = new Vector2(obj.UVs[i * 2], 1.0f - obj.UVs[i * 2 + 1]);
+                    texCoord = new Vector2(obj.UVs[i * 2], obj.UVs[i * 2 + 1]);
                 }
 
                 var lightmapUV = Vector2.Zero;
                 if (obj.LightmapUVs != null && obj.LightmapUVs.Length >= (i + 1) * 2)
                 {
-                    // Flip V coordinate for lightmap UVs as well
-                    lightmapUV = new Vector2(obj.LightmapUVs[i * 2], 1.0f - obj.LightmapUVs[i * 2 + 1]);
+                    lightmapUV = new Vector2(obj.LightmapUVs[i * 2], obj.LightmapUVs[i * 2 + 1]);
                 }
 
                 vertices[i] = new Vertex
@@ -793,9 +754,18 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
                 };
             }
 
+            var indexCount = mesh.Indices.Length;
+            var flippedIndices = new ushort[indexCount];
+            for (int i = 0; i < indexCount; i += 3)
+            {
+                flippedIndices[i] = mesh.Indices[i];
+                flippedIndices[i + 1] = mesh.Indices[i + 2];
+                flippedIndices[i + 2] = mesh.Indices[i + 1];
+            }
+
             var buffers = new ObjectBuffers
             {
-                IndexCount = mesh.Indices.Length
+                IndexCount = indexCount
             };
 
             buffers.Vao = _gl.GenVertexArray();
@@ -804,7 +774,6 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
 
             _gl.BindVertexArray(buffers.Vao);
 
-            // Vertex buffer
             _gl.BindBuffer(BufferTargetARB.ArrayBuffer, buffers.Vbo);
             var vertexSize = Marshal.SizeOf<Vertex>();
             fixed (Vertex* ptr = vertices)
@@ -813,12 +782,11 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
             }
 
             _gl.BindBuffer(BufferTargetARB.ElementArrayBuffer, buffers.Ebo);
-            fixed (ushort* ptr = mesh.Indices)
+            fixed (ushort* ptr = flippedIndices)
             {
-                _gl.BufferData(BufferTargetARB.ElementArrayBuffer, (nuint)(mesh.Indices.Length * sizeof(ushort)), ptr, BufferUsageARB.StaticDraw);
+                _gl.BufferData(BufferTargetARB.ElementArrayBuffer, (nuint)(indexCount * sizeof(ushort)), ptr, BufferUsageARB.StaticDraw);
             }
 
-            // Vertex attributes (Position=0, Normal=12, TexCoord=24, LightmapUV=32)
             _gl.VertexAttribPointer(SceneViewShaders.POSITION_LOC, 3, VertexAttribPointerType.Float, false, (uint)vertexSize, (void*)0);
             _gl.VertexAttribPointer(SceneViewShaders.NORMAL_LOC, 3, VertexAttribPointerType.Float, false, (uint)vertexSize, (void*)12);
             _gl.VertexAttribPointer(SceneViewShaders.TEXCOORD_LOC, 2, VertexAttribPointerType.Float, false, (uint)vertexSize, (void*)24);
@@ -829,7 +797,6 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
             _gl.EnableVertexAttribArray(SceneViewShaders.TEXCOORD_LOC);
             _gl.EnableVertexAttribArray(SceneViewShaders.LIGHTMAP_UV_LOC);
 
-            // Albedo Texture
             if (obj.HasTexture && obj.TextureData != null)
             {
                 buffers.TextureId = _gl.GenTexture();
@@ -841,15 +808,25 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
                 _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.LinearMipmapLinear);
                 _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
 
-                fixed (byte* ptr = obj.TextureData)
+                var width = obj.TextureWidth;
+                var height = obj.TextureHeight;
+                var flippedTexture = new byte[obj.TextureData.Length];
+                var stride = width * 4;
+                for (int y = 0; y < height; y++)
                 {
-                    _gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.Rgba, (uint)obj.TextureWidth, (uint)obj.TextureHeight, 0,
+                    var srcRow = (height - 1 - y) * stride;
+                    var dstRow = y * stride;
+                    Buffer.BlockCopy(obj.TextureData, srcRow, flippedTexture, dstRow, stride);
+                }
+
+                fixed (byte* ptr = flippedTexture)
+                {
+                    _gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.Rgba, (uint)width, (uint)height, 0,
                         PixelFormat.Bgra, PixelType.UnsignedByte, ptr);
                 }
                 _gl.GenerateMipmap(TextureTarget.Texture2D);
             }
 
-            // Lightmap Texture
             if (obj.HasLightmap && obj.LightmapData != null)
             {
                 buffers.LightmapId = _gl.GenTexture();
@@ -881,41 +858,36 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
     {
         if (_gl == null) return;
 
-        // Calculate delta time
         var now = DateTime.Now;
         _deltaTime = (float)(now - _lastFrameTime).TotalSeconds;
         _lastFrameTime = now;
 
-        // Process input
         ProcessKeyboardInput();
 
-        // Handle dirty scene
         if (_dirtyScene)
         {
             _dirtyScene = false;
             BuildSceneBuffers();
         }
-
-        // Clear - Pure black background (Xera Cyber theme)
         _gl.ClearColor(0f, 0f, 0f, 1f);
         _gl.Clear((uint)(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit));
         _gl.Viewport(0, 0, (uint)Bounds.Width, (uint)Bounds.Height);
 
-        // Create matrices
         var aspectRatio = (float)(Bounds.Width / Bounds.Height);
         var projection = Matrix4x4.CreatePerspectiveFieldOfView(MathF.PI / 4f, aspectRatio, 0.1f, 1000f);
         var view = Matrix4x4.CreateLookAt(_cameraPosition, _cameraPosition + _cameraFront, _cameraUp);
 
-        // Render grid
         RenderGrid(projection, view);
-
-        // Render objects
         RenderObjects(projection, view);
 
-        // Render gizmo for selected object
         if (_selectedObject != null)
         {
-            RenderGizmo(projection, view, _selectedObject.LocalPosition);
+            var gizmoPos = new Vector3(
+                _selectedObject.LocalPosition.X,
+                _selectedObject.LocalPosition.Y,
+                -_selectedObject.LocalPosition.Z
+            );
+            RenderGizmo(projection, view, gizmoPos);
         }
 
         CheckError("Render");
@@ -937,7 +909,6 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         _gl.UniformMatrix4(projLoc, 1, false, &projection.M11);
         _gl.UniformMatrix4(viewLoc, 1, false, &view.M11);
         _gl.Uniform1(gridSizeLoc, 1f);
-        // Cyan grid to match Xera Cyber theme (#00d9ff)
         _gl.Uniform3(gridColorLoc, 0.0f, 0.85f, 1.0f);
 
         _gl.BindVertexArray(_gridVao);
@@ -973,11 +944,18 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         _gl.Uniform1(textureLoc, 0);
         _gl.Uniform1(lightmapLoc, 1);
 
+        var zFlip = new Matrix4x4(
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, -1, 0,
+            0, 0, 0, 1
+        );
+
         foreach (var obj in SceneData.AllObjects)
         {
             if (!_objectBuffers.TryGetValue(obj, out var buffers)) continue;
 
-            var model = obj.WorldMatrix;
+            var model = obj.WorldMatrix * zFlip;
             _gl.UniformMatrix4(modelLoc, 1, false, &model.M11);
             _gl.Uniform1(hasTextureLoc, buffers.HasTexture ? 1 : 0);
             _gl.Uniform1(hasLightmapLoc, buffers.HasLightmap ? 1 : 0);
@@ -1104,6 +1082,4 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         _gl.DeleteProgram(_gridShaderProgram);
         _gl.DeleteProgram(_gizmoShaderProgram);
     }
-
-    #endregion
 }

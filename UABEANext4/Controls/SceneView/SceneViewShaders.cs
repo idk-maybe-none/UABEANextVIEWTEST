@@ -2,7 +2,6 @@ namespace UABEANext4.Controls.SceneView;
 
 public static class SceneViewShaders
 {
-    // Vertex shader with texture coordinates and lightmap UVs
     public const string VERTEX_SOURCE = @"#version 300 es
 precision highp float;
 layout (location = 0) in vec3 aPos;
@@ -27,11 +26,9 @@ void main()
     gl_Position = uProjection * uView * worldPos;
     FragNormal = mat3(transpose(inverse(uModel))) * aNormal;
     TexCoord = aTexCoord;
-    // Apply lightmap scale and offset
     LightmapUV = aLightmapUV * uLightmapScaleOffset.xy + uLightmapScaleOffset.zw;
 }";
 
-    // Fragment shader with texture, lighting, and lightmap support
     public const string FRAGMENT_SOURCE = @"#version 300 es
 precision highp float;
 
@@ -47,9 +44,9 @@ uniform vec3 uDirectionalLightColor;
 uniform vec3 uCameraPos;
 uniform sampler2D uTexture;
 uniform sampler2D uLightmap;
-uniform bool uHasTexture;
-uniform bool uHasLightmap;
-uniform bool uIsSelected;
+uniform int uHasTexture;
+uniform int uHasLightmap;
+uniform int uIsSelected;
 uniform vec3 uBaseColor;
 
 void main()
@@ -57,47 +54,36 @@ void main()
     vec3 normal = normalize(FragNormal);
     vec3 lightDirection = normalize(-uDirectionalLightDir);
 
-    // Get base color from texture or uniform
     vec3 objectColor;
-    if (uHasTexture) {
-        objectColor = texture(uTexture, TexCoord).rgb;
+    if (uHasTexture == 1) {
+        vec4 texColor = texture(uTexture, TexCoord);
+        objectColor = texColor.rgb;
     } else {
         objectColor = uBaseColor;
     }
 
     vec3 result;
-    if (uHasLightmap) {
-        // Use lightmap for baked lighting (multiply with albedo)
+    if (uHasLightmap == 1) {
         vec3 lightmapColor = texture(uLightmap, LightmapUV).rgb;
-        // Decode lightmap (Unity uses different encoding, but basic multiply works)
         result = objectColor * lightmapColor * 2.0;
     } else {
-        // Use real-time lighting
-        // Ambient
         vec3 ambient = 0.3 * uDirectionalLightColor;
-
-        // Diffuse
         float diff = max(dot(normal, lightDirection), 0.0);
         vec3 diffuse = diff * uDirectionalLightColor;
-
-        // Specular
         vec3 viewDir = normalize(uCameraPos - FragPos);
         vec3 reflectDir = reflect(-lightDirection, normal);
         float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
-        vec3 specular = 0.2 * spec * uDirectionalLightColor;
-
+        vec3 specular = 0.1 * spec * uDirectionalLightColor;
         result = (ambient + diffuse + specular) * objectColor;
     }
 
-    // Selection highlight
-    if (uIsSelected) {
-        result = mix(result, vec3(1.0, 0.6, 0.0), 0.3);
+    if (uIsSelected == 1) {
+        result = mix(result, vec3(0.0, 0.85, 1.0), 0.3);
     }
 
     FragColor = vec4(result, 1.0);
 }";
 
-    // Simple shader for grid rendering
     public const string GRID_VERTEX_SOURCE = @"#version 300 es
 precision highp float;
 layout (location = 0) in vec3 aPos;
@@ -124,23 +110,17 @@ uniform vec3 uGridColor;
 
 void main()
 {
-    // Calculate grid lines
     float lineWidth = 0.02;
     vec2 coord = FragPos.xz / uGridSize;
     vec2 grid = abs(fract(coord - 0.5) - 0.5) / fwidth(coord);
     float line = min(grid.x, grid.y);
     float alpha = 1.0 - min(line, 1.0);
-
-    // Fade out with distance
     float dist = length(FragPos.xz);
     float fade = 1.0 - smoothstep(50.0, 100.0, dist);
-
     if (alpha < 0.1) discard;
-
     FragColor = vec4(uGridColor, alpha * fade * 0.5);
 }";
 
-    // Gizmo shader for move handles
     public const string GIZMO_VERTEX_SOURCE = @"#version 300 es
 precision highp float;
 layout (location = 0) in vec3 aPos;

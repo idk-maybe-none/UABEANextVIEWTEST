@@ -10,9 +10,6 @@ using UABEANext4.Logic.Mesh;
 
 namespace UABEANext4.Logic.Scene;
 
-/// <summary>
-/// Loads and manages scene data from Unity asset files.
-/// </summary>
 public class SceneData
 {
     public List<SceneObject> RootObjects { get; } = new();
@@ -53,7 +50,6 @@ public class SceneData
 
         Log($"Starting LoadFromFile for: {fileInst.name}");
 
-        // First pass: Create all scene objects with transforms
         var transformInfos = fileInst.file.GetAssetsOfType(AssetClassID.Transform)
             .Concat(fileInst.file.GetAssetsOfType(AssetClassID.RectTransform))
             .ToList();
@@ -65,7 +61,6 @@ public class SceneData
 
         var goPathIdToInfo = goInfos.ToDictionary(g => g.PathId);
 
-        // Map transform PathId to its parent PathId
         var tfmParentMap = new Dictionary<long, long>();
         var tfmToGoMap = new Dictionary<long, long>();
         var tfmChildrenMap = new Dictionary<long, List<long>>();
@@ -82,7 +77,6 @@ public class SceneData
             var goPathId = goPtr["m_PathID"].AsLong;
             tfmToGoMap[tfmInfo.PathId] = goPathId;
 
-            // Read transform data
             var localPos = ReadVector3(tfmBf["m_LocalPosition"]);
             var localRot = ReadQuaternion(tfmBf["m_LocalRotation"]);
             var localScale = ReadVector3(tfmBf["m_LocalScale"]);
@@ -112,7 +106,6 @@ public class SceneData
             _pathIdToObject[tfmInfo.PathId] = sceneObj;
             AllObjects.Add(sceneObj);
 
-            // Track children
             var childrenArr = tfmBf["m_Children.Array"];
             var childIds = new List<long>();
             foreach (var child in childrenArr)
@@ -122,7 +115,6 @@ public class SceneData
             tfmChildrenMap[tfmInfo.PathId] = childIds;
         }
 
-        // Second pass: Build hierarchy
         Log("Building hierarchy...");
         foreach (var kvp in _pathIdToObject)
         {
@@ -145,7 +137,6 @@ public class SceneData
 
         Log($"Built hierarchy: {AllObjects.Count} objects, {RootObjects.Count} root objects");
 
-        // Third pass: Load meshes and materials for objects with MeshFilter/MeshCollider/SkinnedMeshRenderer
         Log("Loading meshes and materials...");
         var meshFilterInfos = fileInst.file.GetAssetsOfType(AssetClassID.MeshFilter).ToList();
         var meshRendererInfos = fileInst.file.GetAssetsOfType(AssetClassID.MeshRenderer).ToList();
@@ -154,13 +145,11 @@ public class SceneData
 
         Log($"Found {meshFilterInfos.Count} MeshFilters, {meshRendererInfos.Count} MeshRenderers, {meshColliderInfos.Count} MeshColliders, {skinnedMeshRendererInfos.Count} SkinnedMeshRenderers");
 
-        // Map GameObject PathId to MeshFilter/MeshRenderer/MeshCollider/SkinnedMeshRenderer
         var goToMeshFilter = new Dictionary<long, AssetFileInfo>();
         var goToMeshRenderer = new Dictionary<long, AssetFileInfo>();
         var goToMeshCollider = new Dictionary<long, AssetFileInfo>();
         var goToSkinnedMeshRenderer = new Dictionary<long, AssetFileInfo>();
 
-        // Track which GameObjects have batched/combined meshes (so we skip their MeshFilter)
         var batchedGameObjects = new HashSet<long>();
 
         foreach (var mfInfo in meshFilterInfos)
@@ -180,14 +169,12 @@ public class SceneData
             var goPathId = mrBf["m_GameObject"]["m_PathID"].AsLong;
             goToMeshRenderer[goPathId] = mrInfo;
 
-            // Check if this object uses a batched/combined mesh
             var staticBatchInfo = mrBf["m_StaticBatchInfo"];
             if (staticBatchInfo != null && !staticBatchInfo.IsDummy)
             {
                 var subMeshCount = staticBatchInfo["subMeshCount"].AsInt;
                 if (subMeshCount > 0)
                 {
-                    // This object's MeshFilter points to a combined mesh - mark it as batched
                     batchedGameObjects.Add(goPathId);
                 }
             }
@@ -211,12 +198,6 @@ public class SceneData
             goToSkinnedMeshRenderer[goPathId] = smrInfo;
         }
 
-        // Load mesh data for each scene object
-        // Priority order:
-        // 1. SkinnedMeshRenderer mesh (for animated/skinned objects)
-        // 2. MeshCollider mesh (if exists) - most accurate representation for batched objects
-        // 3. MeshFilter mesh (only for non-batched objects) - original mesh
-        // Note: Batched objects without MeshCollider will not show a mesh (combined meshes look fragmented)
         int meshesLoaded = 0;
         int meshLoadErrors = 0;
         int colliderMeshesLoaded = 0;
@@ -228,7 +209,6 @@ public class SceneData
 
             bool meshLoaded = false;
 
-            // First priority: Try SkinnedMeshRenderer mesh (for animated objects)
             if (goToSkinnedMeshRenderer.TryGetValue(goPathId, out var smrInfo))
             {
                 var smrBf = _workspace.GetBaseField(fileInst, smrInfo.PathId);
@@ -254,16 +234,13 @@ public class SceneData
                                     {
                                         sceneObj.UVs = sceneObj.Mesh.UVs[0];
                                     }
-                                    // Load UV1 for lightmaps
                                     if (sceneObj.Mesh?.UVs != null && sceneObj.Mesh.UVs.Length > 1 && sceneObj.Mesh.UVs[1] != null)
                                     {
                                         sceneObj.LightmapUVs = sceneObj.Mesh.UVs[1];
                                     }
 
-                                    // Mark as skinned mesh
                                     sceneObj.IsSkinnedMesh = true;
 
-                                    // Get root bone for proper positioning
                                     var rootBonePtr = smrBf["m_RootBone"];
                                     if (rootBonePtr != null && !rootBonePtr.IsDummy)
                                     {
@@ -288,7 +265,6 @@ public class SceneData
                         }
                     }
 
-                    // Load texture from SkinnedMeshRenderer materials
                     if (meshLoaded)
                     {
                         var materialsArr = smrBf["m_Materials.Array"];
@@ -314,7 +290,6 @@ public class SceneData
                 }
             }
 
-            // Second priority: Try MeshCollider mesh (best representation for static batched objects)
             if (!meshLoaded && goToMeshCollider.TryGetValue(goPathId, out var mcInfo))
             {
                 var mcBf = _workspace.GetBaseField(fileInst, mcInfo.PathId);
@@ -340,7 +315,6 @@ public class SceneData
                                     {
                                         sceneObj.UVs = sceneObj.Mesh.UVs[0];
                                     }
-                                    // Load UV1 for lightmaps
                                     if (sceneObj.Mesh?.UVs != null && sceneObj.Mesh.UVs.Length > 1 && sceneObj.Mesh.UVs[1] != null)
                                     {
                                         sceneObj.LightmapUVs = sceneObj.Mesh.UVs[1];
@@ -360,10 +334,8 @@ public class SceneData
                 }
             }
 
-            // Second priority: Try MeshFilter mesh (if not batched or no collider mesh)
             if (!meshLoaded && goToMeshFilter.TryGetValue(goPathId, out var mfInfo))
             {
-                // Check if this is a batched object - if so, skip MeshFilter (it points to combined mesh)
                 var isBatched = batchedGameObjects.Contains(goPathId);
 
                 if (!isBatched)
@@ -391,7 +363,6 @@ public class SceneData
                                         {
                                             sceneObj.UVs = sceneObj.Mesh.UVs[0];
                                         }
-                                        // Load UV1 for lightmaps
                                         if (sceneObj.Mesh?.UVs != null && sceneObj.Mesh.UVs.Length > 1 && sceneObj.Mesh.UVs[1] != null)
                                         {
                                             sceneObj.LightmapUVs = sceneObj.Mesh.UVs[1];
@@ -411,7 +382,6 @@ public class SceneData
                 }
             }
 
-            // Load texture from material
             if (goToMeshRenderer.TryGetValue(goPathId, out var mrInfo))
             {
                 var mrBf = _workspace.GetBaseField(fileInst, mrInfo.PathId);
@@ -433,7 +403,6 @@ public class SceneData
                         catch (Exception ex)
                         {
                             Log($"Texture load failed for '{sceneObj.Name}': {ex.Message}");
-                            // Texture loading failed, skip
                         }
                     }
                 }
@@ -442,15 +411,12 @@ public class SceneData
 
         Log($"Loaded {meshesLoaded} meshes ({skinnedMeshesLoaded} skinned, {colliderMeshesLoaded} from MeshColliders, {meshLoadErrors} errors)");
 
-        // Compute world matrices and bounds
         Log("Computing world matrices and bounds...");
         foreach (var root in RootObjects)
         {
             root.ComputeWorldMatrix();
         }
 
-        // Second pass: Update skinned mesh positions using root bone world matrices
-        // This ensures the root bone's world matrix is available before we use it
         foreach (var obj in AllObjects)
         {
             if (obj.IsSkinnedMesh && obj.RootBone != null)
@@ -472,14 +438,12 @@ public class SceneData
         var matBf = _workspace.GetBaseField(fileInst, matFileId, matPathId);
         if (matBf == null) return;
 
-        // Try to find _MainTex in the saved properties
         var savedProps = matBf["m_SavedProperties"];
         if (savedProps == null || savedProps.IsDummy) return;
 
         var texEnvs = savedProps["m_TexEnvs.Array"];
         if (texEnvs == null || texEnvs.IsDummy) return;
 
-        // First pass: look for standard texture property names
         foreach (var texEnv in texEnvs)
         {
             if (texEnv == null) continue;
@@ -488,7 +452,6 @@ public class SceneData
             if (firstField == null || firstField.IsDummy) continue;
 
             var texName = firstField.AsString;
-            // Check for common texture property names across different shaders
             if (texName == "_MainTex" || texName == "_BaseMap" || texName == "_Albedo" ||
                 texName == "_BaseColorMap" || texName == "_Diffuse" || texName == "_DiffuseMap" ||
                 texName == "_BaseColor" || texName == "_Color" || texName == "_AlbedoMap" ||
@@ -511,7 +474,6 @@ public class SceneData
             }
         }
 
-        // Second pass: fallback - load any texture that exists in the material
         foreach (var texEnv in texEnvs)
         {
             if (texEnv == null) continue;
