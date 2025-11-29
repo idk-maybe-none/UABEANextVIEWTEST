@@ -648,18 +648,30 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
             var vertices = new Vertex[vertexCount];
             for (int i = 0; i < vertexCount; i++)
             {
-                var pos = new Vector3(mesh.Vertices[i * 3], mesh.Vertices[i * 3 + 1], mesh.Vertices[i * 3 + 2]);
+                // Unity uses left-handed coordinate system (Y-up), OpenGL uses right-handed
+                // Negate Z to convert from Unity to OpenGL coordinates
+                var pos = new Vector3(
+                    mesh.Vertices[i * 3],
+                    mesh.Vertices[i * 3 + 1],
+                    -mesh.Vertices[i * 3 + 2]  // Negate Z for coordinate system conversion
+                );
 
                 var normal = Vector3.UnitY;
                 if (mesh.Normals != null && mesh.Normals.Length >= (i + 1) * 3)
                 {
-                    normal = new Vector3(-mesh.Normals[i * 3], mesh.Normals[i * 3 + 1], mesh.Normals[i * 3 + 2]);
+                    // Also negate Z for normals
+                    normal = new Vector3(
+                        mesh.Normals[i * 3],
+                        mesh.Normals[i * 3 + 1],
+                        -mesh.Normals[i * 3 + 2]  // Negate Z for coordinate system conversion
+                    );
                 }
 
                 var texCoord = Vector2.Zero;
                 if (obj.UVs != null && obj.UVs.Length >= (i + 1) * 2)
                 {
-                    texCoord = new Vector2(obj.UVs[i * 2], obj.UVs[i * 2 + 1]);
+                    // Flip V coordinate (1 - v) for OpenGL texture coordinates
+                    texCoord = new Vector2(obj.UVs[i * 2], 1.0f - obj.UVs[i * 2 + 1]);
                 }
 
                 vertices[i] = new Vertex

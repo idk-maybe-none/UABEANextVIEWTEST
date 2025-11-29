@@ -145,18 +145,20 @@ public class SceneData
 
         Log($"Built hierarchy: {AllObjects.Count} objects, {RootObjects.Count} root objects");
 
-        // Third pass: Load meshes and materials for objects with MeshFilter/MeshCollider
+        // Third pass: Load meshes and materials for objects with MeshFilter/MeshCollider/SkinnedMeshRenderer
         Log("Loading meshes and materials...");
         var meshFilterInfos = fileInst.file.GetAssetsOfType(AssetClassID.MeshFilter).ToList();
         var meshRendererInfos = fileInst.file.GetAssetsOfType(AssetClassID.MeshRenderer).ToList();
         var meshColliderInfos = fileInst.file.GetAssetsOfType(AssetClassID.MeshCollider).ToList();
+        var skinnedMeshRendererInfos = fileInst.file.GetAssetsOfType(AssetClassID.SkinnedMeshRenderer).ToList();
 
-        Log($"Found {meshFilterInfos.Count} MeshFilters, {meshRendererInfos.Count} MeshRenderers, {meshColliderInfos.Count} MeshColliders");
+        Log($"Found {meshFilterInfos.Count} MeshFilters, {meshRendererInfos.Count} MeshRenderers, {meshColliderInfos.Count} MeshColliders, {skinnedMeshRendererInfos.Count} SkinnedMeshRenderers");
 
-        // Map GameObject PathId to MeshFilter/MeshRenderer/MeshCollider
+        // Map GameObject PathId to MeshFilter/MeshRenderer/MeshCollider/SkinnedMeshRenderer
         var goToMeshFilter = new Dictionary<long, AssetFileInfo>();
         var goToMeshRenderer = new Dictionary<long, AssetFileInfo>();
         var goToMeshCollider = new Dictionary<long, AssetFileInfo>();
+        var goToSkinnedMeshRenderer = new Dictionary<long, AssetFileInfo>();
 
         // Track which GameObjects have batched/combined meshes (so we skip their MeshFilter)
         var batchedGameObjects = new HashSet<long>();
@@ -200,14 +202,25 @@ public class SceneData
             goToMeshCollider[goPathId] = mcInfo;
         }
 
+        foreach (var smrInfo in skinnedMeshRendererInfos)
+        {
+            var smrBf = _workspace.GetBaseField(fileInst, smrInfo.PathId);
+            if (smrBf == null) continue;
+
+            var goPathId = smrBf["m_GameObject"]["m_PathID"].AsLong;
+            goToSkinnedMeshRenderer[goPathId] = smrInfo;
+        }
+
         // Load mesh data for each scene object
         // Priority order:
-        // 1. MeshCollider mesh (if exists) - most accurate representation for batched objects
-        // 2. MeshFilter mesh (only for non-batched objects) - original mesh
+        // 1. SkinnedMeshRenderer mesh (for animated/skinned objects)
+        // 2. MeshCollider mesh (if exists) - most accurate representation for batched objects
+        // 3. MeshFilter mesh (only for non-batched objects) - original mesh
         // Note: Batched objects without MeshCollider will not show a mesh (combined meshes look fragmented)
         int meshesLoaded = 0;
         int meshLoadErrors = 0;
         int colliderMeshesLoaded = 0;
+        int skinnedMeshesLoaded = 0;
         foreach (var sceneObj in AllObjects)
         {
             var goPathId = tfmToGoMap.GetValueOrDefault(sceneObj.PathId, 0);
@@ -215,8 +228,73 @@ public class SceneData
 
             bool meshLoaded = false;
 
-            // First priority: Try MeshCollider mesh (best representation for static batched objects)
-            if (goToMeshCollider.TryGetValue(goPathId, out var mcInfo))
+            // First priority: Try SkinnedMeshRenderer mesh (for animated objects)
+            if (goToSkinnedMeshRenderer.TryGetValue(goPathId, out var smrInfo))
+            {
+                var smrBf = _workspace.GetBaseField(fileInst, smrInfo.PathId);
+                if (smrBf != null)
+                {
+                    var meshPtr = smrBf["m_Mesh"];
+                    if (meshPtr != null && !meshPtr.IsDummy)
+                    {
+                        var meshPathId = meshPtr["m_PathID"].AsLong;
+                        var meshFileId = meshPtr["m_FileID"].AsInt;
+
+                        if (meshPathId != 0)
+                        {
+                            try
+                            {
+                                var meshBf = _workspace.GetBaseField(fileInst, meshFileId, meshPathId);
+                                if (meshBf != null)
+                                {
+                                    var version = fileInst.file.Metadata.UnityVersion;
+                                    sceneObj.Mesh = new MeshObj(fileInst, meshBf, new UnityVersion(version));
+
+                                    if (sceneObj.Mesh?.UVs != null && sceneObj.Mesh.UVs.Length > 0 && sceneObj.Mesh.UVs[0] != null)
+                                    {
+                                        sceneObj.UVs = sceneObj.Mesh.UVs[0];
+                                    }
+                                    meshLoaded = true;
+                                    skinnedMeshesLoaded++;
+                                    meshesLoaded++;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Log($"SkinnedMeshRenderer mesh load failed for '{sceneObj.Name}': {ex.Message}");
+                                meshLoadErrors++;
+                            }
+                        }
+                    }
+
+                    // Load texture from SkinnedMeshRenderer materials
+                    if (meshLoaded)
+                    {
+                        var materialsArr = smrBf["m_Materials.Array"];
+                        if (materialsArr != null && !materialsArr.IsDummy && materialsArr.Children.Count > 0)
+                        {
+                            var matPtr = materialsArr[0];
+                            var matPathId = matPtr["m_PathID"].AsLong;
+                            var matFileId = matPtr["m_FileID"].AsInt;
+
+                            if (matPathId != 0)
+                            {
+                                try
+                                {
+                                    LoadTextureFromMaterial(fileInst, matFileId, matPathId, sceneObj);
+                                }
+                                catch (Exception ex)
+                                {
+                                    Log($"Texture load failed for skinned mesh '{sceneObj.Name}': {ex.Message}");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Second priority: Try MeshCollider mesh (best representation for static batched objects)
+            if (!meshLoaded && goToMeshCollider.TryGetValue(goPathId, out var mcInfo))
             {
                 var mcBf = _workspace.GetBaseField(fileInst, mcInfo.PathId);
                 if (mcBf != null)
@@ -331,7 +409,7 @@ public class SceneData
             }
         }
 
-        Log($"Loaded {meshesLoaded} meshes ({colliderMeshesLoaded} from MeshColliders, {meshLoadErrors} errors)");
+        Log($"Loaded {meshesLoaded} meshes ({skinnedMeshesLoaded} skinned, {colliderMeshesLoaded} from MeshColliders, {meshLoadErrors} errors)");
 
         // Compute world matrices and bounds
         Log("Computing world matrices and bounds...");
