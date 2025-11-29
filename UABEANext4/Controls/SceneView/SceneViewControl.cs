@@ -53,6 +53,11 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
     private Vector3 _dragOffset; // Offset from object center to click point
     private int _activeAxis = -1; // 0=X, 1=Y, 2=Z, -1=none
 
+    // Undo/Redo system
+    private readonly Stack<SceneUndoAction> _undoStack = new();
+    private readonly Stack<SceneUndoAction> _redoStack = new();
+    private const int MaxUndoStackSize = 100;
+
     // Frame timing
     private DateTime _lastFrameTime = DateTime.Now;
     private float _deltaTime = 0f;
@@ -83,6 +88,60 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
     {
         _dirtyScene = true;
         InvalidateVisual();
+    }
+
+    /// <summary>
+    /// Pushes an undo action onto the stack.
+    /// </summary>
+    public void PushUndoAction(SceneUndoAction action)
+    {
+        _undoStack.Push(action);
+        _redoStack.Clear(); // Clear redo stack when new action is pushed
+
+        // Limit stack size
+        if (_undoStack.Count > MaxUndoStackSize)
+        {
+            var tempStack = new Stack<SceneUndoAction>();
+            for (int i = 0; i < MaxUndoStackSize; i++)
+            {
+                tempStack.Push(_undoStack.Pop());
+            }
+            _undoStack.Clear();
+            while (tempStack.Count > 0)
+            {
+                _undoStack.Push(tempStack.Pop());
+            }
+        }
+    }
+
+    /// <summary>
+    /// Undoes the last action.
+    /// </summary>
+    public bool Undo()
+    {
+        if (_undoStack.Count == 0)
+            return false;
+
+        var action = _undoStack.Pop();
+        action.Undo();
+        _redoStack.Push(action);
+        InvalidateVisual();
+        return true;
+    }
+
+    /// <summary>
+    /// Redoes the last undone action.
+    /// </summary>
+    public bool Redo()
+    {
+        if (_redoStack.Count == 0)
+            return false;
+
+        var action = _redoStack.Pop();
+        action.Redo();
+        _undoStack.Push(action);
+        InvalidateVisual();
+        return true;
     }
 
     // Event for selection changes
@@ -225,6 +284,18 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         }
         else if (e.InitialPressMouseButton == MouseButton.Left)
         {
+            // Create undo action if object was dragged
+            if ((_isDragging || _isDraggingObject) && _selectedObject != null)
+            {
+                var newPos = _selectedObject.LocalPosition;
+                if (_dragStartPos != newPos)
+                {
+                    // Only create undo action if position actually changed
+                    var action = new MoveObjectAction(_selectedObject, _dragStartPos, newPos);
+                    PushUndoAction(action);
+                }
+            }
+
             _isDragging = false;
             _isDraggingObject = false;
             e.Pointer.Capture(null);
@@ -331,10 +402,35 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         _pressedKeys.Add(e.Key);
 
         // Handle keyboard shortcuts
-        if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && e.Key == Key.D)
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
-            DuplicateRequested?.Invoke(this, EventArgs.Empty);
-            e.Handled = true;
+            switch (e.Key)
+            {
+                case Key.Z:
+                    if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+                    {
+                        // Ctrl+Shift+Z = Redo
+                        Redo();
+                    }
+                    else
+                    {
+                        // Ctrl+Z = Undo
+                        Undo();
+                    }
+                    e.Handled = true;
+                    break;
+
+                case Key.Y:
+                    // Ctrl+Y = Redo
+                    Redo();
+                    e.Handled = true;
+                    break;
+
+                case Key.D:
+                    DuplicateRequested?.Invoke(this, EventArgs.Empty);
+                    e.Handled = true;
+                    break;
+            }
         }
         else if (e.Key == Key.Delete)
         {
@@ -578,6 +674,7 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         _gl = GL.GetApi(glInterface.GetProcAddress);
 
         _gl.Enable(EnableCap.DepthTest);
+        _gl.Disable(EnableCap.CullFace);  // Disable backface culling for double-sided rendering
         _gl.Enable(EnableCap.Blend);
         _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
 
@@ -656,29 +753,27 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
             var vertices = new Vertex[vertexCount];
             for (int i = 0; i < vertexCount; i++)
             {
-                // Unity uses left-handed coordinate system (Y-up), OpenGL uses right-handed
-                // Negate Z to convert from Unity to OpenGL coordinates
+                // Unity uses left-handed coordinate system, flip X for mirror correction
                 var pos = new Vector3(
-                    mesh.Vertices[i * 3],
+                    -mesh.Vertices[i * 3],      // Negate X to fix sideways inversion
                     mesh.Vertices[i * 3 + 1],
-                    -mesh.Vertices[i * 3 + 2]  // Negate Z for coordinate system conversion
+                    mesh.Vertices[i * 3 + 2]
                 );
 
                 var normal = Vector3.UnitY;
                 if (mesh.Normals != null && mesh.Normals.Length >= (i + 1) * 3)
                 {
-                    // Also negate Z for normals
                     normal = new Vector3(
-                        mesh.Normals[i * 3],
+                        -mesh.Normals[i * 3],   // Negate X for normals too
                         mesh.Normals[i * 3 + 1],
-                        -mesh.Normals[i * 3 + 2]  // Negate Z for coordinate system conversion
+                        mesh.Normals[i * 3 + 2]
                     );
                 }
 
                 var texCoord = Vector2.Zero;
                 if (obj.UVs != null && obj.UVs.Length >= (i + 1) * 2)
                 {
-                    // Flip V coordinate (1 - v) for OpenGL texture coordinates
+                    // Flip V coordinate: Unity uses bottom-left origin, textures stored with top-left origin
                     texCoord = new Vector2(obj.UVs[i * 2], 1.0f - obj.UVs[i * 2 + 1]);
                 }
 
@@ -802,8 +897,8 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
             BuildSceneBuffers();
         }
 
-        // Clear
-        _gl.ClearColor(0.15f, 0.15f, 0.18f, 1f);
+        // Clear - Dark blue cyber theme background
+        _gl.ClearColor(0.04f, 0.04f, 0.06f, 1f);
         _gl.Clear((uint)(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit));
         _gl.Viewport(0, 0, (uint)Bounds.Width, (uint)Bounds.Height);
 
@@ -843,7 +938,8 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         _gl.UniformMatrix4(projLoc, 1, false, &projection.M11);
         _gl.UniformMatrix4(viewLoc, 1, false, &view.M11);
         _gl.Uniform1(gridSizeLoc, 1f);
-        _gl.Uniform3(gridColorLoc, 0.5f, 0.5f, 0.5f);
+        // Blue-tinted grid to match cyber theme
+        _gl.Uniform3(gridColorLoc, 0.0f, 0.4f, 0.6f);
 
         _gl.BindVertexArray(_gridVao);
         _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);

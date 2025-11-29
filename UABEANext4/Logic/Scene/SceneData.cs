@@ -259,6 +259,22 @@ public class SceneData
                                     {
                                         sceneObj.LightmapUVs = sceneObj.Mesh.UVs[1];
                                     }
+
+                                    // Mark as skinned mesh
+                                    sceneObj.IsSkinnedMesh = true;
+
+                                    // Get root bone for proper positioning
+                                    var rootBonePtr = smrBf["m_RootBone"];
+                                    if (rootBonePtr != null && !rootBonePtr.IsDummy)
+                                    {
+                                        var rootBonePathId = rootBonePtr["m_PathID"].AsLong;
+                                        if (rootBonePathId != 0 && _pathIdToObject.TryGetValue(rootBonePathId, out var rootBoneObj))
+                                        {
+                                            sceneObj.RootBone = rootBoneObj;
+                                            Log($"SkinnedMesh '{sceneObj.Name}' uses root bone '{rootBoneObj.Name}'");
+                                        }
+                                    }
+
                                     meshLoaded = true;
                                     skinnedMeshesLoaded++;
                                     meshesLoaded++;
@@ -433,6 +449,16 @@ public class SceneData
             root.ComputeWorldMatrix();
         }
 
+        // Second pass: Update skinned mesh positions using root bone world matrices
+        // This ensures the root bone's world matrix is available before we use it
+        foreach (var obj in AllObjects)
+        {
+            if (obj.IsSkinnedMesh && obj.RootBone != null)
+            {
+                obj.WorldMatrix = obj.RootBone.WorldMatrix;
+            }
+        }
+
         foreach (var obj in AllObjects)
         {
             obj.ComputeBounds();
@@ -453,6 +479,7 @@ public class SceneData
         var texEnvs = savedProps["m_TexEnvs.Array"];
         if (texEnvs == null || texEnvs.IsDummy) return;
 
+        // First pass: look for standard texture property names
         foreach (var texEnv in texEnvs)
         {
             if (texEnv == null) continue;
@@ -461,7 +488,11 @@ public class SceneData
             if (firstField == null || firstField.IsDummy) continue;
 
             var texName = firstField.AsString;
-            if (texName == "_MainTex" || texName == "_BaseMap" || texName == "_Albedo")
+            // Check for common texture property names across different shaders
+            if (texName == "_MainTex" || texName == "_BaseMap" || texName == "_Albedo" ||
+                texName == "_BaseColorMap" || texName == "_Diffuse" || texName == "_DiffuseMap" ||
+                texName == "_BaseColor" || texName == "_Color" || texName == "_AlbedoMap" ||
+                texName == "_MainTexture" || texName == "_Texture")
             {
                 var secondField = texEnv["second"];
                 if (secondField == null || secondField.IsDummy) continue;
@@ -479,32 +510,73 @@ public class SceneData
                 }
             }
         }
+
+        // Second pass: fallback - load any texture that exists in the material
+        foreach (var texEnv in texEnvs)
+        {
+            if (texEnv == null) continue;
+
+            var secondField = texEnv["second"];
+            if (secondField == null || secondField.IsDummy) continue;
+
+            var texPtr = secondField["m_Texture"];
+            if (texPtr == null || texPtr.IsDummy) continue;
+
+            var texPathId = texPtr["m_PathID"].AsLong;
+            var texFileId = texPtr["m_FileID"].AsInt;
+
+            if (texPathId != 0)
+            {
+                LoadTexture(fileInst, texFileId, texPathId, sceneObj);
+                return;
+            }
+        }
     }
 
     private void LoadTexture(AssetsFileInstance fileInst, int texFileId, long texPathId, SceneObject sceneObj)
     {
         var texAsset = _workspace.GetAssetInst(fileInst, texFileId, texPathId);
-        if (texAsset == null) return;
+        if (texAsset == null)
+        {
+            Log($"LoadTexture: texAsset is null for pathId {texPathId}");
+            return;
+        }
 
         var texBf = _workspace.GetBaseField(texAsset);
-        if (texBf == null) return;
+        if (texBf == null)
+        {
+            Log($"LoadTexture: texBf is null for pathId {texPathId}");
+            return;
+        }
 
         try
         {
             var texture = TextureFile.ReadTextureFile(texBf);
             var encData = texture.FillPictureData(texAsset.FileInstance);
+
+            if (encData == null || encData.Length == 0)
+            {
+                Log($"LoadTexture: No encoded data for texture {texture.m_Name}");
+                return;
+            }
+
             var decData = texture.DecodeTextureRaw(encData);
 
-            if (decData != null)
+            if (decData != null && decData.Length > 0)
             {
                 sceneObj.TextureData = decData;
                 sceneObj.TextureWidth = texture.m_Width;
                 sceneObj.TextureHeight = texture.m_Height;
+                Log($"Loaded texture '{texture.m_Name}' ({texture.m_Width}x{texture.m_Height}) for '{sceneObj.Name}'");
+            }
+            else
+            {
+                Log($"LoadTexture: DecodeTextureRaw returned null/empty for {texture.m_Name}");
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Texture decode failed
+            Log($"LoadTexture: Exception decoding texture for '{sceneObj.Name}': {ex.Message}");
         }
     }
 

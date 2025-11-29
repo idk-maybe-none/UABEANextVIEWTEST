@@ -53,6 +53,10 @@ public class SceneObject
     // Selection state
     public bool IsSelected { get; set; }
 
+    // For skinned meshes - reference to root bone for proper positioning
+    public SceneObject? RootBone { get; set; }
+    public bool IsSkinnedMesh { get; set; }
+
     // Bounding box for picking
     public Vector3 BoundsMin { get; set; }
     public Vector3 BoundsMax { get; set; }
@@ -70,6 +74,15 @@ public class SceneObject
         else
         {
             WorldMatrix = localMatrix;
+        }
+
+        // For skinned meshes, use the root bone's world matrix for positioning
+        // This ensures the mesh appears at the correct location in the scene
+        if (IsSkinnedMesh && RootBone != null)
+        {
+            // Make sure root bone's world matrix is computed first
+            // (it should already be computed since it's typically a parent or sibling)
+            WorldMatrix = RootBone.WorldMatrix;
         }
 
         // Recursively update children
