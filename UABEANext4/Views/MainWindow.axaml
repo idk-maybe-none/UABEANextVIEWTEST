@@ -22,22 +22,17 @@
     <vm:MainViewModel/>
   </Design.DataContext>
 
-  <Panel Margin="{Binding #MainWindowName.OffScreenMargin}">
-    <!-- Draggable title bar area -->
-    <Panel Name="TitleBar" Height="30" HorizontalAlignment="Stretch" VerticalAlignment="Top" Background="Transparent">
-      <Label Content="{Binding Path=Title, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType=Window}}"
-             Margin="4,8,4,0"
-             FontSize="14"
-             FontWeight="Normal"
-             FontFamily="Consolas,Monospace,Courier,DejaVu Sans Mono,Roboto Mono"
-             VerticalAlignment="Center"
-             HorizontalAlignment="Center"
-             VerticalContentAlignment="Center"
-             IsHitTestVisible="False"
-             Foreground="#00d9ff"/>
+  <Grid RowDefinitions="32,*" Margin="{Binding #MainWindowName.OffScreenMargin}">
+    <Panel Name="TitleBar" Grid.Row="0" Background="#000000">
+      <TextBlock Text="UABEANextVIEWTEST"
+                 FontSize="14"
+                 FontWeight="Bold"
+                 FontFamily="Consolas,Monospace,Courier"
+                 VerticalAlignment="Center"
+                 HorizontalAlignment="Center"
+                 Foreground="#00d9ff"
+                 IsHitTestVisible="False"/>
     </Panel>
-    <Panel Margin="0,0,0,0">
-      <v:MainView/>
-    </Panel>
-  </Panel>
+    <v:MainView Grid.Row="1"/>
+  </Grid>
 </Window>

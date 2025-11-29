@@ -535,80 +535,45 @@ public class SceneData
 
     private void LoadTexture(AssetsFileInstance fileInst, int texFileId, long texPathId, SceneObject sceneObj)
     {
-        var texAsset = _workspace.GetAssetInst(fileInst, texFileId, texPathId);
-        if (texAsset == null)
-        {
-            Log($"LoadTexture: texAsset is null for pathId {texPathId}");
-            return;
-        }
-
-        var texBf = _workspace.GetBaseField(texAsset);
-        if (texBf == null)
-        {
-            Log($"LoadTexture: texBf is null for pathId {texPathId}");
-            return;
-        }
+        if (fileInst == null || sceneObj == null) return;
 
         try
         {
+            var texAsset = _workspace.GetAssetInst(fileInst, texFileId, texPathId);
+            if (texAsset == null || texAsset.FileInstance == null) return;
+
+            var texBf = _workspace.GetBaseField(texAsset);
+            if (texBf == null) return;
+
             var texture = TextureFile.ReadTextureFile(texBf);
+            if (texture == null) return;
+            if (texture.m_Width <= 0 || texture.m_Height <= 0) return;
+            if (texture.m_TextureFormat <= 0) return;
 
-            // Validate texture properties before attempting decode
-            if (texture == null)
+            byte[]? encData = null;
+            try
             {
-                Log($"LoadTexture: Failed to read texture file for '{sceneObj.Name}'");
-                return;
+                encData = texture.FillPictureData(texAsset.FileInstance);
             }
+            catch { return; }
 
-            if (texture.m_Width <= 0 || texture.m_Height <= 0)
-            {
-                Log($"LoadTexture: Invalid texture dimensions for '{sceneObj.Name}': {texture.m_Width}x{texture.m_Height}");
-                return;
-            }
+            if (encData == null || encData.Length == 0) return;
 
-            // Skip unsupported or problematic texture formats
-            if (texture.m_TextureFormat <= 0)
-            {
-                Log($"LoadTexture: Unsupported texture format for '{sceneObj.Name}'");
-                return;
-            }
-
-            var encData = texture.FillPictureData(texAsset.FileInstance);
-
-            if (encData == null || encData.Length == 0)
-            {
-                Log($"LoadTexture: No encoded data for texture {texture.m_Name}");
-                return;
-            }
-
-            // Try to decode - some formats may not be supported
             byte[]? decData = null;
             try
             {
                 decData = texture.DecodeTextureRaw(encData);
             }
-            catch (Exception decodeEx)
-            {
-                Log($"LoadTexture: Decode failed for '{texture.m_Name}' (format {texture.m_TextureFormat}): {decodeEx.Message}");
-                return;
-            }
+            catch { return; }
 
             if (decData != null && decData.Length > 0)
             {
                 sceneObj.TextureData = decData;
                 sceneObj.TextureWidth = texture.m_Width;
                 sceneObj.TextureHeight = texture.m_Height;
-                Log($"Loaded texture '{texture.m_Name}' ({texture.m_Width}x{texture.m_Height}) for '{sceneObj.Name}'");
-            }
-            else
-            {
-                Log($"LoadTexture: DecodeTextureRaw returned null/empty for {texture.m_Name}");
             }
         }
-        catch (Exception ex)
-        {
-            Log($"LoadTexture: Exception for '{sceneObj.Name}': {ex.Message}");
-        }
+        catch { }
     }
 
     private static Vector3 ReadVector3(AssetTypeValueField field)
