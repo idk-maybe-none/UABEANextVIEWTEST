@@ -509,14 +509,8 @@ public class SceneData
 
                 if (texPathId != 0)
                 {
-                    var texPathId = texPathIdField.AsLong;
-                    var texFileId = texFileIdField.AsInt;
-
-                    if (texPathId != 0)
-                    {
-                        LoadTexture(fileInst, texFileId, texPathId, sceneObj);
-                        return;
-                    }
+                    LoadTexture(fileInst, texFileId, texPathId, sceneObj);
+                    return;
                 }
             }
         }
@@ -551,33 +545,20 @@ public class SceneData
 
     private static Vector3 ReadVector3(AssetTypeValueField field)
     {
-        if (field == null) return Vector3.Zero;
-        
-        var xField = field["x"];
-        var yField = field["y"];
-        var zField = field["z"];
-        
         return new Vector3(
-            xField?.AsFloat ?? 0f,
-            yField?.AsFloat ?? 0f,
-            zField?.AsFloat ?? 0f
+            field["x"].AsFloat,
+            field["y"].AsFloat,
+            field["z"].AsFloat
         );
     }
 
     private static Quaternion ReadQuaternion(AssetTypeValueField field)
     {
-        if (field == null) return Quaternion.Identity;
-        
-        var xField = field["x"];
-        var yField = field["y"];
-        var zField = field["z"];
-        var wField = field["w"];
-        
         return new Quaternion(
-            xField?.AsFloat ?? 0f,
-            yField?.AsFloat ?? 0f,
-            zField?.AsFloat ?? 0f,
-            wField?.AsFloat ?? 1f
+            field["x"].AsFloat,
+            field["y"].AsFloat,
+            field["z"].AsFloat,
+            field["w"].AsFloat
         );
     }
 
