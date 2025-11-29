@@ -94,11 +94,10 @@
           </StackPanel>
         </StackPanel>
 
-        <!-- Object actions (always visible when an object is selected) -->
+        <!-- Selection info (displayed when an object is selected) -->
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" IsVisible="{Binding SelectedObject, Converter={x:Static ObjectConverters.IsNotNull}}">
-          <Button Content="Duplicate" Command="{Binding DuplicateObjectCommand}" ToolTip.Tip="Duplicate selected object (Ctrl+D)" Padding="8,4" />
-          <Button Content="Delete" Command="{Binding DeleteObjectCommand}" ToolTip.Tip="Delete selected object (Del)" Padding="8,4" />
-          <Button Content="Move to Root" Command="{Binding MoveToRootCommand}" ToolTip.Tip="Move selected object to root level" Padding="8,4" />
+          <TextBlock VerticalAlignment="Center" Text="Selected:" Foreground="#808080" />
+          <TextBlock VerticalAlignment="Center" Text="{Binding SelectedObject.Name}" Foreground="#e0e0e0" FontWeight="SemiBold" />
         </StackPanel>
       </Grid>
     </Border>
@@ -137,9 +136,22 @@
 
       <!-- Hierarchy Panel -->
       <Border x:Name="hierarchyPanel" Classes="card" IsVisible="False" Padding="8">
-        <Grid RowDefinitions="Auto,*">
+        <Grid RowDefinitions="Auto,Auto,*">
           <TextBlock Grid.Row="0" Text="Scene Hierarchy" FontWeight="SemiBold" Foreground="#e0e0e0" Margin="0,0,0,8" />
-          <TreeView Grid.Row="1" x:Name="hierarchyTree"
+
+          <!-- Object Actions Toolbar -->
+          <Border Grid.Row="1" Background="#2a2a2c" CornerRadius="6" Padding="8,6" Margin="0,0,0,8"
+                  IsVisible="{Binding SelectedObject, Converter={x:Static ObjectConverters.IsNotNull}}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock VerticalAlignment="Center" Text="{Binding SelectedObject.Name}" Foreground="#e0e0e0" FontWeight="SemiBold" />
+              <Rectangle Width="1" Fill="#404042" Margin="4,2" />
+              <Button Content="Duplicate" Command="{Binding DuplicateObjectCommand}" ToolTip.Tip="Duplicate selected object (Ctrl+D)" Padding="8,4" />
+              <Button Content="Delete" Command="{Binding DeleteObjectCommand}" ToolTip.Tip="Delete selected object (Del)" Padding="8,4" />
+              <Button Content="Move to Root" Command="{Binding MoveToRootCommand}" ToolTip.Tip="Move selected object to root level" Padding="8,4" />
+            </StackPanel>
+          </Border>
+
+          <TreeView Grid.Row="2" x:Name="hierarchyTree"
                     ItemsSource="{Binding SceneData.RootObjects}"
                     Background="Transparent"
                     SelectedItem="{Binding SelectedObject, Mode=TwoWay}">

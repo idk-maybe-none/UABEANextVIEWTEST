@@ -17,25 +17,193 @@
     <StyleInclude Source="avares://UABEANext4/Themes/TabTheme.axaml" />
     <StyleInclude Source="avares://UABEANext4/Themes/DataValidationStyle.axaml" />
     <StyleInclude Source="avares://UABEANext4/Themes/RadioButtonListBox.axaml" />
-    <!--<StyleInclude Source="avares://UABEANext4/Themes/ImprovedTabStyles.axaml"/>-->
     <StyleInclude Source="avares://AvaloniaEdit/Themes/Simple/AvaloniaEdit.xaml" />
 
+    <!-- ==================== MODERN UI STYLES ==================== -->
+
+    <!-- Modern Button Style -->
     <Style Selector="Button">
-      <Setter Property="BorderBrush" Value="#555555" />
+      <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="Padding" Value="12,6"/>
+      <Setter Property="Background" Value="#3a3a3c"/>
+      <Setter Property="Foreground" Value="#e0e0e0"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="BorderBrush" Value="#505052"/>
     </Style>
     <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="BorderBrush" Value="#0097fb" />
+      <Setter Property="Background" Value="#505052"/>
+      <Setter Property="BorderBrush" Value="#0078d4"/>
     </Style>
     <Style Selector="Button:pressed /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="#0097fb" />
+      <Setter Property="Background" Value="#0078d4"/>
+      <Setter Property="BorderBrush" Value="#0078d4"/>
     </Style>
+    <Style Selector="Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#2a2a2c"/>
+      <Setter Property="Foreground" Value="#606060"/>
+    </Style>
+
+    <!-- Modern TextBox Style -->
+    <Style Selector="TextBox">
+      <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="Background" Value="#2a2a2c"/>
+      <Setter Property="BorderBrush" Value="#404042"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Padding" Value="8,6"/>
+      <Setter Property="Foreground" Value="#e0e0e0"/>
+    </Style>
+    <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+      <Setter Property="BorderBrush" Value="#0078d4"/>
+    </Style>
+    <Style Selector="TextBox:pointerover /template/ Border#PART_BorderElement">
+      <Setter Property="BorderBrush" Value="#505052"/>
+    </Style>
+
+    <!-- Modern ComboBox Style -->
+    <Style Selector="ComboBox">
+      <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="Background" Value="#2a2a2c"/>
+      <Setter Property="BorderBrush" Value="#404042"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Padding" Value="8,6"/>
+      <Setter Property="Foreground" Value="#e0e0e0"/>
+    </Style>
+    <Style Selector="ComboBox:pointerover /template/ Border#Background">
+      <Setter Property="BorderBrush" Value="#505052"/>
+    </Style>
+    <Style Selector="ComboBox:focus /template/ Border#Background">
+      <Setter Property="BorderBrush" Value="#0078d4"/>
+    </Style>
+
+    <!-- Modern CheckBox Style -->
+    <Style Selector="CheckBox">
+      <Setter Property="Foreground" Value="#e0e0e0"/>
+    </Style>
+    <Style Selector="CheckBox /template/ Border#NormalRectangle">
+      <Setter Property="CornerRadius" Value="4"/>
+      <Setter Property="Background" Value="#2a2a2c"/>
+      <Setter Property="BorderBrush" Value="#404042"/>
+    </Style>
+    <Style Selector="CheckBox:pointerover /template/ Border#NormalRectangle">
+      <Setter Property="BorderBrush" Value="#505052"/>
+    </Style>
+    <Style Selector="CheckBox:checked /template/ Border#NormalRectangle">
+      <Setter Property="Background" Value="#0078d4"/>
+      <Setter Property="BorderBrush" Value="#0078d4"/>
+    </Style>
+
+    <!-- Modern Menu Style -->
+    <Style Selector="Menu">
+      <Setter Property="Background" Value="#252526"/>
+      <Setter Property="Foreground" Value="#e0e0e0"/>
+    </Style>
+    <Style Selector="MenuItem">
+      <Setter Property="Foreground" Value="#e0e0e0"/>
+    </Style>
+    <Style Selector="MenuItem:pointerover /template/ Border#PART_LayoutRoot">
+      <Setter Property="Background" Value="#3a3a3c"/>
+    </Style>
+    <Style Selector="MenuItem:selected /template/ Border#PART_LayoutRoot">
+      <Setter Property="Background" Value="#0078d4"/>
+    </Style>
+
+    <!-- Modern TreeView Style -->
+    <Style Selector="TreeView">
+      <Setter Property="Background" Value="#1e1e1e"/>
+      <Setter Property="Foreground" Value="#e0e0e0"/>
+    </Style>
+    <Style Selector="TreeViewItem">
+      <Setter Property="Foreground" Value="#e0e0e0"/>
+    </Style>
+    <Style Selector="TreeViewItem:pointerover /template/ Border#PART_LayoutRoot">
+      <Setter Property="Background" Value="#2a2a2c"/>
+    </Style>
+    <Style Selector="TreeViewItem:selected /template/ Border#PART_LayoutRoot">
+      <Setter Property="Background" Value="#0078d4"/>
+    </Style>
+
+    <!-- Modern ListBox Style -->
+    <Style Selector="ListBox">
+      <Setter Property="Background" Value="#1e1e1e"/>
+      <Setter Property="Foreground" Value="#e0e0e0"/>
+    </Style>
+    <Style Selector="ListBoxItem">
+      <Setter Property="Foreground" Value="#e0e0e0"/>
+    </Style>
+    <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#2a2a2c"/>
+    </Style>
+    <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#0078d4"/>
+    </Style>
+
+    <!-- Modern DataGrid Style -->
+    <Style Selector="DataGrid">
+      <Setter Property="Background" Value="#1e1e1e"/>
+      <Setter Property="Foreground" Value="#e0e0e0"/>
+      <Setter Property="RowBackground" Value="#1e1e1e"/>
+      <Setter Property="AlternatingRowBackground" Value="#252526"/>
+      <Setter Property="GridLinesVisibility" Value="Horizontal"/>
+      <Setter Property="HorizontalGridLinesBrush" Value="#2a2a2c"/>
+    </Style>
+    <Style Selector="DataGridRow:pointerover /template/ Rectangle#BackgroundRectangle">
+      <Setter Property="Fill" Value="#2a2a2c"/>
+    </Style>
+    <Style Selector="DataGridRow:selected /template/ Rectangle#BackgroundRectangle">
+      <Setter Property="Fill" Value="#0078d4"/>
+    </Style>
+    <Style Selector="DataGridColumnHeader">
+      <Setter Property="Background" Value="#252526"/>
+      <Setter Property="Foreground" Value="#a0a0a0"/>
+      <Setter Property="Padding" Value="8,6"/>
+    </Style>
+
+    <!-- Modern ProgressBar Style -->
+    <Style Selector="ProgressBar">
+      <Setter Property="CornerRadius" Value="4"/>
+      <Setter Property="Background" Value="#2a2a2c"/>
+      <Setter Property="Foreground" Value="#0078d4"/>
+    </Style>
+    <Style Selector="ProgressBar /template/ Border#PART_Indicator">
+      <Setter Property="CornerRadius" Value="4"/>
+    </Style>
+
+    <!-- Modern ScrollBar Style -->
+    <Style Selector="ScrollBar">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="ScrollBar /template/ Thumb">
+      <Setter Property="Background" Value="#505052"/>
+    </Style>
+    <Style Selector="ScrollBar /template/ Thumb:pointerover">
+      <Setter Property="Background" Value="#606062"/>
+    </Style>
+
+    <!-- Modern Border/Card Style -->
+    <Style Selector="Border.modernCard">
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Background" Value="#1e1e1e"/>
+      <Setter Property="BorderBrush" Value="#3a3a3c"/>
+      <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+
+    <!-- Panel backgrounds -->
+    <Style Selector="Panel.modernPanel">
+      <Setter Property="Background" Value="#252526"/>
+    </Style>
+
+    <!-- Tool Chrome Control -->
     <Style Selector="ToolChromeControl /template/ TextBlock#PART_Title">
-      <Setter Property="Margin" Value="0,2,8,2" />
+      <Setter Property="Margin" Value="0,2,8,2"/>
     </Style>
+
+    <!-- Scroll bar thumb thickness -->
     <Style>
       <Style.Resources>
-        <sys:Double x:Key="ScrollBarThumbThickness">14</sys:Double>
+        <sys:Double x:Key="ScrollBarThumbThickness">12</sys:Double>
       </Style.Resources>
     </Style>
+
+    <!-- ==================== END MODERN UI STYLES ==================== -->
   </Application.Styles>
 </Application>

@@ -169,8 +169,25 @@ public class SceneData
             if (goBf != null)
             {
                 // m_StaticEditorFlags: non-zero means the object has some static flags set
-                var staticFlags = goBf["m_StaticEditorFlags"].AsUInt;
-                goStaticFlags[goInfo.PathId] = staticFlags;
+                // Note: This field may not exist in all Unity versions, so we need to check
+                var staticFlagsField = goBf["m_StaticEditorFlags"];
+                if (staticFlagsField != null && !staticFlagsField.IsDummy)
+                {
+                    try
+                    {
+                        var staticFlags = staticFlagsField.AsUInt;
+                        goStaticFlags[goInfo.PathId] = staticFlags;
+                    }
+                    catch
+                    {
+                        // Field exists but can't be read as uint - ignore
+                        goStaticFlags[goInfo.PathId] = 0;
+                    }
+                }
+                else
+                {
+                    goStaticFlags[goInfo.PathId] = 0;
+                }
             }
         }
 
