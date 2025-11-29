@@ -1,7 +1,7 @@
 # UABEA Next (Xera's Version)
 
 <p align="center">
-  <img src="Assets/1.png" alt="screenshitter" />
+  <img src="1.png" alt="screenshitter" />
 </p>
 
 <p align="center">
