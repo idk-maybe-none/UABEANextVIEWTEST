@@ -440,11 +440,12 @@ public class SceneData
                 if (materialsArr != null && !materialsArr.IsDummy && materialsArr.Children.Count > 0)
                 {
                     var matPtr = materialsArr[0];
-                    if (matPtr != null)
+                    var matPathId = matPtr["m_PathID"].AsLong;
+                    var matFileId = matPtr["m_FileID"].AsInt;
+
+                    if (matPathId != 0)
                     {
-                        var matPathIdField = matPtr["m_PathID"];
-                        var matFileIdField = matPtr["m_FileID"];
-                        if (matPathIdField != null && matFileIdField != null)
+                        try
                         {
                             LoadTextureFromMaterial(fileInst, matFileId, matPathId, sceneObj);
                         }
